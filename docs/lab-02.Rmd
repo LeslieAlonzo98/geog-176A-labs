@@ -1,0 +1,91 @@
+---
+title: "Geography 176A"
+author: "[Leslie Alonzo](https://LeslieAlonzo98.github.io)"
+subtitle: 'Lab 02: COVID-19 Pandemic'
+output:
+  html_document:
+    theme: journal
+---
+
+1. The counties in California with the most COVID cases are Los Angeles, Riverside, Orange, San Bernardino, and San Diego.
+2. The counties in California with the most new COVID cases are Los Angeles, San Bernardino, Riverside, Fresno, and Orange.
+3. Our data shows that these were the top counties for COVID cases in the state. The county of Alpine showed zero cases, making it the safest county in the state.
+
+
+```{R}
+
+library(tidyverse)
+
+library(knitr)
+
+library(zoo)
+
+library(readxl)
+
+PopulationEstimates <- read_excel("C:/Users/princ/Documents/github/geog-176A-labs/data/PopulationEstimates.xls",
+  skip = 2)
+
+url="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
+
+covid = read_csv(url)
+
+state.of.interest = "California"
+
+covid2 = covid %>%
+  filter(state == state.of.interest) %>% 
+  group_by(county) %>% 
+  mutate(new_cases = cases - lag(cases)) %>% 
+  ungroup()
+
+mostcases = covid2 %>% 
+  filter(date == max(date)) %>% 
+  slice_max(cases, n = 5) %>% 
+  select(county, cases)
+
+mostnewcases = covid2 %>% 
+  filter(date == max(date)) %>% 
+  slice_max(new_cases, n = 5) %>% 
+  select(county, new_cases)
+  
+knitr::kable(mostcases, caption = "California Counties with the Most COVID Cases",
+  col.names = c("County","Cases"),
+  format.args = list(big.mark = ","))
+
+knitr::kable(mostnewcases, caption = "California Counties with the Most New COVID Cases",
+  col.names = c("County", "New Cases"),
+  format.args = list(big.mark = ","))
+
+PopEstCA = PopulationEstimates %>% 
+  filter(State == "CA") %>% 
+  select(POP_ESTIMATE_2019, FIPStxt)
+
+left_join(covid2, PopEstCA, by = c('fips' = 'FIPStxt')) ->
+CAcovidpop
+
+mostcasescap = CAcovidpop %>% 
+  filter(date == max(date)) %>% 
+  mutate(Most_cases_capita = (cases / POP_ESTIMATE_2019) * 100) %>% 
+  slice_max(Most_cases_capita, n = 5) %>% 
+  select(county, Most_cases_capita)
+
+knitr::kable(mostcasescap, caption = "California Counties with the Most COVID Cases per capita",
+  col.names = c("County", "Cases per capita"))  
+
+mostnewcasescap = CAcovidpop %>% 
+  filter(date == max(date)) %>% 
+  mutate(Most_new_cases_capita = (new_cases / POP_ESTIMATE_2019) * 100) %>% 
+  slice_max(Most_new_cases_capita, n = 5) %>% 
+  select(county, Most_new_cases_capita)
+
+knitr::kable(mostnewcasescap, caption = "California Counties with the Most New COVID Cases per capita",
+  col.names = c("County", "New Cases per Capita"))
+
+CAcovidpop3 = CAcovidpop %>% 
+  group_by(county) %>% 
+  mutate(total_new_cases = rollsum(new_cases, 14, fill = NA, align = "right")) %>% 
+  ungroup() %>% 
+  filter(date > max(date) - 14) %>% 
+  group_by(county) %>% 
+  summarise(total_new_cases)
+  ```
+  
