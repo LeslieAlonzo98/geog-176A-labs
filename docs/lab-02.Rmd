@@ -21,7 +21,7 @@ library(zoo)
 
 library(readxl)
 
-PopulationEstimates <- read_excel("C:/Users/princ/Documents/github/geog-176A-labs/data/PopulationEstimates.xls",
+PopulationEstimates <- read_excel("../data/PopulationEstimates.xls",
   skip = 2)
 
 url="https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
