@@ -7,7 +7,7 @@ output:
     theme: journal
 ---
 
-```{R}
+```{r, include=FALSE, message=FALSE, echo=FALSE}
 # SPDS
 library(tidyverse)
 library(sf)
@@ -18,16 +18,17 @@ library(USAboundaries)
 library(rnaturalearth)
 
 # Visualization
+library(ggplot2)
 library(gghighlight)
 library(ggrepel)
 library(knitr)
+library(kableExtra)
 
 # North America Equidistant Conic
 eqdc = '+proj=eqdc +lat_0=40 +lon_0=-96 +lat_1=20 +lat_2=60 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs'
 ```
-```{r}
-#1.1
-
+#Question 1, Created Data Sets
+```{r, echo=FALSE, message=FALSE}
 
 #1.2
 
@@ -56,7 +57,8 @@ cities = readr::read_csv("../data/uscities.csv") %>%
   st_as_sf(coords = c("lng","lat"), crs = 4326) %>% 
   st_transform(eqdc)
 ```
-```{r}
+#Question 2
+```{r, echo=FALSE, message=FALSE}
 #2.1 Distance to USA Border
 
 us_united = st_union(conus) %>%
@@ -77,7 +79,9 @@ dist_usaborder_df = as.data.frame(dist_usaborder_table) %>%
 
 
 knitr::kable(dist_usaborder_df, caption = "Cities Furthest from USA Border",
-               col.names = c("city","state", "distance"))
+             col.names = c("city","state", "distance"),
+             format.args = list(big.mark = ",")) %>%
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 12)
 
 
 #2.2 Distance to States 
@@ -100,7 +104,9 @@ dist_state_df = as.data.frame(dist_state_table) %>%
 
 
 knitr::kable(dist_state_df, caption = "Cities Furthest from State Border",
-               col.names = c("city","state", "distance"))
+             col.names = c("city","state", "distance"),
+             format.args = list(big.mark = ",")) %>%
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 12)
 
 #2.3 Distance to Mexico
 
@@ -122,7 +128,9 @@ dist_mexico_df = as.data.frame(dist_mexico_table) %>%
 
 
 knitr::kable(dist_mexico_df, caption = "Cities Furthest from Mexico Border",
-               col.names = c("city","state", "distance"))
+             col.names = c("city","state", "distance"),
+             format.args = list(big.mark = ",")) %>%
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 12)
 
 #2.4
 
@@ -144,11 +152,13 @@ dist_canada_df = as.data.frame(dist_canada_table) %>%
 
 
 knitr::kable(dist_canada_df, caption = "Cities Furthest from Canada Border",
-               col.names = c("city","state", "distance"))
+             col.names = c("city","state", "distance"),
+             format.args = list(big.mark = ",")) %>%
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 12)
 
 ```
-
-```{r}
+#Question 3 Top 10 Cities with the Most Population
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #3.1 Data
 topuscities = cities %>% 
   slice_max(population, n = 10) 
@@ -183,6 +193,7 @@ ggplot() +
        col = "Distance from National Border (km)") +
   theme_gray() ->
   uscitybordermap
+plot(uscitybordermap)
 ggsave(uscitybordermap, file = "../img/uscityborder.png")
 
 
@@ -205,6 +216,7 @@ ggplot() +
        col = "Distance from State Border (km)") +
   theme_gray() ->
   statecitybordermap
+plot(statecitybordermap)
 ggsave(statecitybordermap, file = "../img/statecitybordermap.png")
 
 #3.4 Equidistance Boundary from Mexico to Canada
@@ -237,19 +249,40 @@ ggplot() +
        col = "Distance from Mexico and Canada Borders (km)") +
   theme_gray() ->
   mexcanbordermap
+plot(mexcanbordermap)
 ggsave(mexcanbordermap, file = "../img/mexcanbordermap.png")
   
 ```
-```{r}
+#Question 4, Most Populated City in each State within Border Zone
+```{r, echo=FALSE, message=FALSE}
 #4.1 Quantifying Border Zone
 
 borderzone = cities %>% 
   filter(dist_usaborder <= 160)
 
-popbzone = borderzone %>% 
-  group_by(dist_usaborder <= 160) %>%
-  summarise(population) %>% 
-  mutate(totpopulation = sum(population))
+borderzonepop = borderzone %>%
+  group_by(state_name) %>% 
+  slice_max(population, n = 1)
+
+ggplot() +
+  geom_sf(data = us_combined) +
+  geom_sf(data = borderzone, aes(col = dist_usaborder), size = .1) +
+  geom_sf(data = borderzonepop) +
+  scale_color_gradient(low = "red", high = "orange") +
+  ggrepel::geom_label_repel(
+  data = borderzonepop,
+  aes(label = city, geometry = geometry),
+  stat = "sf_coordinates",
+  size = 2.5) +
+  labs(title = "Cities Within Border Zone",
+       subtitle = "Most Populated City in each State within Border Zone",
+       x = "",
+       y = "",
+       col = "Distance from Border Zone (km)") +
+  theme_gray() ->
+  topcitiesborderzone
+plot(topcitiesborderzone)
+ggsave(topcitiesborderzone, file = "../img/topcitiesborderzone.png")
 
 ```
 
