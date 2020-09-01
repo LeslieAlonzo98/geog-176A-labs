@@ -64,15 +64,19 @@ point_in_polygon3 = function(points, polygon, group){
     st_as_sf()
 }
 
-step2function = function(data, title){
-  data2 = data %>% 
-    mutate(area = st_area(data) %>%
-    set_units("km^2") %>% 
-    drop_units())
-
-sumframe = data.frame(data2, type = title, elements = nrow(data2), meanarea = mean(area), sd = sd(area), totalArea = sum(area))
-return(sumframe)
+step2function <- function(data, title){
+  data = data %>%
+    mutate(area = st_area(data) %>% 
+    set_units("km2") %>% 
+    drop_units(),
+    type = title) %>% 
+    st_drop_geometry() %>% 
+    mutate(mean = mean(area)) %>% 
+    mutate(sd = sd(area)) %>% 
+    mutate(totalArea = sum(area))
 }
+
+
   
 
 
@@ -136,7 +140,7 @@ pip_counties_grid = st_make_grid(pip_counties, n = c(70, 50)) %>%
 
 plot_tess(pip_counties_grid, "Counties, Square Grid")
 
-squarearea = step2function(pip_counties_grid, "Counties, Square Grid")
+squarearea = step2function(pip_counties_grid, "CountiesSquareGrid")
 
 #COVERAGE HEX GRID
 
@@ -187,8 +191,14 @@ tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, 
 knitr::kable(tess_summary)
 ```
 
-```{r}
+```{r Question}
 damdata = read_xlsx('../data/NID2019_U.xlsx') %>% 
-  filter(!na())
+  filter(!is.na()) %>% 
+  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>% 
+  st_transform(5070)
+
+
+
+
 ```
 
