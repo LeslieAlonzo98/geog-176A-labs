@@ -1,0 +1,194 @@
+---
+title: "Geography 176A"
+author: "[Leslie Alonzo](https://LeslieAlonzo98.github.io)"
+subtitle: 'Daily Exercise 15'
+output:
+  html_document:
+    theme: journal
+---
+
+```{r Import libraries,include=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(sf)
+library(stars)
+library(units)
+library(raster)
+library(mapview)
+library(leaflet)
+library(gdalUtilities)
+library(rmapshaper)
+library(knitr)
+library(kableExtra)
+library(readxl)
+```
+
+```{r Functions}
+get_conus = function(data, var){
+  conus = filter(data, !get(var) %in% c("Hawaii", "Puerto Rico", "Alaska"))
+  return(conus)
+}
+
+plotter = function(arg1, arg2){
+  ggplot() +
+    geom_sf(data = arg1, fill = "white", col = "navy", size = 0.2) +
+    theme_void() +
+    labs(title = arg2,
+         caption = nrow(arg1) + " observations")
+}
+
+plot_tess = function(data, title){
+  ggplot() + 
+    geom_sf(data = data, fill = "white", col = "navy", size = .2) +   
+    theme_void() +
+    labs(title = title, caption = paste("This tesselation has:", nrow(data), "tiles" )) +
+    theme(plot.title = element_text(hjust = .5, color =  "navy", face = "bold"))
+}
+
+plot_pip = function(data){
+  ggplot() +
+    geom_sf(data = data, aes(fill = log(n)), alpha = .9, size = .2) +
+    scale_fill_gradient(low = "white", high = "darkgreen") +
+    theme_void() +
+    theme(legend.position = 'none',
+          plot.title = element_text(face = "bold", color = "darkgreen", hjust = .5, size = 24)) +
+    labs(title = "Counties in Each State",
+         caption = paste0(sum(data$n), " Counties represented"))
+}
+
+point_in_polygon3 = function(points, polygon, group){
+  st_join(polygon, points) %>%
+    st_drop_geometry() %>%
+    count(get(group)) %>%
+    setNames(c(group, "n")) %>%
+    left_join(polygon, by = group) %>%
+    st_as_sf()
+}
+
+step2function = function(data, title){
+  data2 = data %>% 
+    mutate(area = st_area(data) %>%
+    set_units("km^2") %>% 
+    drop_units())
+
+sumframe = data.frame(data2, type = title, elements = nrow(data2), meanarea = mean(area), sd = sd(area), totalArea = sum(area))
+return(sumframe)
+}
+  
+
+
+```
+
+```{r Question 1}
+#Question 1
+
+conus = USAboundaries::us_states() %>%
+  st_as_sf(coords = c("lng", "lat"), crs = 4326)
+
+counties2 = get_conus(USAboundaries::us_counties(), "state_name") %>%
+  st_transform(st_crs(conus)) %>%
+  dplyr::select(name)
+
+counties = get_conus(USAboundaries::us_counties(), "state_name") %>%
+  st_transform(st_crs(conus)) %>%
+  dplyr::select(geoid)
+
+polygon = get_conus(conus, "name") %>%
+  dplyr::select(name)
+
+join1 = st_join(polygon, counties) %>%
+  st_drop_geometry() %>%
+  count(name) %>%
+  left_join(polygon, by = 'name') %>%
+  st_as_sf()
+
+
+
+pip_counties = point_in_polygon3(join1, counties, "geoid") %>% 
+  dplyr::select(n)
+
+
+
+plot_pip(pip_counties)
+
+
+
+
+pip_counties = st_transform(pip_counties, 5070)
+
+pip_cent = st_centroid(pip_counties)
+
+ggplot() +
+  geom_sf(data = pip_counties) +
+  geom_sf(data = pip_cent) +
+  theme_gray()
+
+
+
+plot_tess(pip_counties, "Counties")
+
+countyarea = step2function(pip_counties, "Counties")
+
+#cOVERAGE SQUARE GRID
+
+pip_counties_grid = st_make_grid(pip_counties, n = c(70, 50)) %>% 
+  st_as_sf() %>% 
+  mutate(id = 1:n())
+
+plot_tess(pip_counties_grid, "Counties, Square Grid")
+
+squarearea = step2function(pip_counties_grid, "Counties, Square Grid")
+
+#COVERAGE HEX GRID
+
+pip_counties_hexgrid = st_make_grid(pip_counties, n = c(70, 50), square = FALSE) %>% 
+  st_as_sf() %>% 
+  mutate(id = 1:n())
+
+plot_tess(pip_counties_hexgrid, "Counties, Hexagon Grid")
+
+hexagonarea = step2function(pip_counties_hexgrid, "Counties, Hexagon Grid")
+
+
+# VORONI TESSELLATION
+
+pip_counties_u = st_union(pip_cent)
+
+v_grid = st_voronoi(pip_counties_u) %>% 
+  st_cast() %>% 
+  st_as_sf() %>% 
+  mutate(id = 1:n())
+
+v_grid_final = st_intersection(v_grid, st_union(pip_counties))
+
+plot_tess(v_grid_final, "Voroni Coverage") + 
+  geom_sf(data = pip_counties_u, col = "darkred", size = .2)
+
+voroniarea = step2function(v_grid_final, "Voroni Coverage")
+
+
+#TRIANGULATED TESSELLATION
+
+t_grid = st_triangulate(pip_counties_u) %>% 
+  st_cast() %>% 
+  st_as_sf() %>% 
+  mutate(id = 1:n())
+         
+t_grid_final = st_intersection(t_grid, st_union(pip_counties))
+
+plot_tess(t_grid_final, "Triangulated Coverage") + 
+  geom_sf(data = pip_cent, col = "darkred", size = .3)
+
+triangulatedarea = step2function(t_grid_final, "Triangulated Coverage")
+```
+
+```{r Question 2}
+tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, voroniarea) 
+
+knitr::kable(tess_summary)
+```
+
+```{r}
+damdata = read_xlsx('../data/NID2019_U.xlsx') %>% 
+  filter(!na())
+```
+
