@@ -28,14 +28,6 @@ get_conus = function(data, var){
   return(conus)
 }
 
-plotter = function(arg1, arg2){
-  ggplot() +
-    geom_sf(data = arg1, fill = "white", col = "navy", size = 0.2) +
-    theme_void() +
-    labs(title = arg2,
-         caption = nrow(arg1) + " observations")
-}
-
 plot_tess = function(data, title){
   ggplot() + 
     geom_sf(data = data, fill = "white", col = "navy", size = .2) +   
@@ -130,7 +122,8 @@ ggplot() +
 
 plot_tess(pip_counties, "Counties")
 
-countyarea = step2function(pip_counties, "Counties")
+countyarea = step2function(pip_counties, "Counties") %>% 
+  dplyr::select(c(area, type, mean, sd, totalArea))
 
 #cOVERAGE SQUARE GRID
 
@@ -140,7 +133,8 @@ pip_counties_grid = st_make_grid(pip_counties, n = c(70, 50)) %>%
 
 plot_tess(pip_counties_grid, "Counties, Square Grid")
 
-squarearea = step2function(pip_counties_grid, "CountiesSquareGrid")
+squarearea = step2function(pip_counties_grid, "CountiesSquareGrid") %>% 
+  dplyr::select(c(area, type, mean, sd, totalArea))
 
 #COVERAGE HEX GRID
 
@@ -150,7 +144,8 @@ pip_counties_hexgrid = st_make_grid(pip_counties, n = c(70, 50), square = FALSE)
 
 plot_tess(pip_counties_hexgrid, "Counties, Hexagon Grid")
 
-hexagonarea = step2function(pip_counties_hexgrid, "Counties, Hexagon Grid")
+hexagonarea = step2function(pip_counties_hexgrid, "Counties, Hexagon Grid") %>% 
+  dplyr::select(c(area, type, mean, sd, totalArea))
 
 
 # VORONI TESSELLATION
@@ -167,7 +162,8 @@ v_grid_final = st_intersection(v_grid, st_union(pip_counties))
 plot_tess(v_grid_final, "Voroni Coverage") + 
   geom_sf(data = pip_counties_u, col = "darkred", size = .2)
 
-voroniarea = step2function(v_grid_final, "Voroni Coverage")
+voroniarea = step2function(v_grid_final, "Voroni Coverage") %>% 
+  dplyr::select(c(area, type, mean, sd, totalArea))
 
 
 #TRIANGULATED TESSELLATION
@@ -182,13 +178,19 @@ t_grid_final = st_intersection(t_grid, st_union(pip_counties))
 plot_tess(t_grid_final, "Triangulated Coverage") + 
   geom_sf(data = pip_cent, col = "darkred", size = .3)
 
-triangulatedarea = step2function(t_grid_final, "Triangulated Coverage")
+triangulatedarea = step2function(t_grid_final, "Triangulated Coverage") %>% 
+  dplyr::select(c(area, type, mean, sd, totalArea))
 ```
 
 ```{r Question 2}
-tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, voroniarea) 
+tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, voroniarea) %>% 
+  dplyr::select(type, area, mean, sd, totalArea)
 
-knitr::kable(tess_summary)
+knitr::kable(tess_summary,
+             caption = "Tess Summary",
+             col.names = c("type", "area", "mean", "sd", "totalArea"),
+             format.args = list(big.mark = ",")) %>% 
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 10) 
 ```
 
 ```{r Question}
