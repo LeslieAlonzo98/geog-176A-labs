@@ -1,9 +1,20 @@
-```{r Importing Libraries}
+---
+title: "Geography 176A"
+author: "[Leslie Alonzo](https://LeslieAlonzo98.github.io)"
+subtitle: 'Lab 5'
+output:
+  html_document:
+    theme: journal
+---
+
+```{r Importing Libraries, include=FALSE, message=FALSE, echo=FALSE}
 library(raster)
 library(tidyverse)
 library(getlandsat)
 library(sf)
 library(mapview)
+library(elevatr)
+library(knitr)
 ```
 
 ```{r Question 1}
@@ -17,6 +28,11 @@ palobb = readr::read_csv("../data/uscities.csv") %>%
   st_as_sf()
 
 mapview(palobb)
+
+palobbwgs = palobb %>% 
+  st_transform(4326)
+
+palobb = st_bbox(palobbwgs)
 ```
 
 ```{r Question 2}
@@ -26,11 +42,146 @@ files = lsat_scene_files(meta$download_url) %>%
   filter(grepl(paste0("B", 1:6, ".TIF$", collapse = "|" ), file)) %>%
   arrange(file) %>%
   pull(file)
-  
+
 st = sapply(files, lsat_image)
 
+s = stack(st) %>% 
+  setNames(c(paste0("band", 1:6)))
 
-                 
+crop = palobbwgs %>% 
+  st_transform(crs(s))
+
+crop2 = crop(s, crop)
+
+# The dimensions are 7811 rows by 7681 columns. The resolution is 30, and the CRS is WSG83. The dimensions of the cropped image changes to 340 rows by 346 columns, the resolution and CRS remain the same.
+
   
 ```
+
+```{r Question 3}
+# natural color
+plotRGB(crop2, r = 4, g = 3, b = 2, stretch = "lin")
+
+#color infrared
+plotRGB(crop2, r = 5, g = 4, b = 3, stretch = "lin")
+
+#false color water focus
+plotRGB(crop2, r = 5, g = 6, b = 4, stretch = "lin")
+
+#false color fire effect focus
+plotRGB(crop2, r = 7, g = 5, b = 2, stretch = "lin")
+
+par(mfrow = c(4,1))
+
+#Applying a color stretch further emphasizes the features of our AOI, in these specific images the feature that it mostly shown is water.
+
+
+```
+
+```{r Question 4}
+ndvi = (crop2$band5 - crop2$band4) / (crop2$band5 + crop2$band4)
+
+ndwi = (crop2$band3 - crop2$band5) / (crop2$band3 + crop2$band5)
+
+mndwi = (crop2$band3 - crop2$band6) / (crop2$band3 + crop2$band6)
+
+wri = (crop2$band3 + crop2$band4) / (crop2$band5 + crop2$band6)
+
+swi = 1 / sqrt(crop2$band2 - crop2$band6)
+
+palette = colorRampPalette(c("blue", "white", "red"))
+
+
+plotcrp = stack(c(ndvi, ndwi, mndwi, wri, swi)) %>% 
+  setNames(c("NDVI", "NDWI", "MNDWI", "WRI", "SWI"))
+
+plot(plotcrp, col = palette(256))
+
+#THRESHOLDING
+
+thresholdingndvi = function(x){ifelse(x < 0, 1, 0)}
+
+flood = calc(ndvi, thresholdingndvi)
+flood[is.na(flood)] = 0
+
+thndwi = function(x){ifelse(x > 0, 1, 0)}
+
+ndwithreshold = calc(ndwi, thndwi)
+ndwithreshold[is.na(ndwithreshold)] = 0
+
+mndwithreshold = calc(mndwi, thndwi)
+mndwithreshold[is.na(mndwithreshold)] = 0
+
+
+thwri = function(x){ifelse(x > 1, 1, 0)}
+writhreshold = calc(wri, thwri)
+writhreshold[is.na(writhreshold)] = 0
+
+thswi = function(x){ifelse(x < 5, 1, 0)}
+swithreshold = calc(swi, thswi)
+swithreshold[is.na(swithreshold)] = 0
+
+thpalette <- colorRampPalette(c("white", "blue"))(2)
+
+thstack = stack(c(flood, ndwithreshold, mndwithreshold, writhreshold, swithreshold)) %>% 
+  setNames(c("NDVI", "NDWI", "MNDWI", "WRI", "SWI"))
+plot(thstack, col = thpalette)
+
+#All five images emphasize water features, they differ in how they represent water features and vegetation.
+```
+
+```{r Question 5}
+set.seed(09092020)
+
+dim(thstack)
+
+thstack <- thstack %>% 
+  na.omit()
+
+stackvalues <- getValues(thstack)
+
+idx = which(!is.na(values))
+
+k12 <- kmeans(stackvalues, 12, iter.max = 100)
+
+k6 <- kmeans(stackvalues, 6, iter.max = 100)
+
+k3 <- kmeans(stackvalues, 3, iter.max = 100)
+
+#Once the dimensions are extracted from the values, I know that it is 340 rows by 346 columns with five layers.
+
+```
+
+```{r Question 6}
+
+ndvicell <- flood %>% 
+  cellStats(sum)*90
+
+ndwicell <- ndwithreshold %>% 
+  cellStats(sum)*90
+
+mndwicell <- mndwithreshold %>% 
+  cellStats(sum)*90
+
+wricell <- writhreshold %>% 
+  cellStats(sum)*90
+
+swicell <- swithreshold %>% 
+  cellStats(sum)*90
+
+table <- data.frame(ndvicell, ndwicell, mndwicell, wricell, swicell)
+
+knitr::kable(table, caption = "Area of Raster Method",
+             col.names = c("NDVI Area", "NDWI Area", "MNDWI Area", "WRI Area", "SWI Area"),
+             format.args = list(big.mark = ","))
+
+datasum <- calc(thstack, sum)
+plot(datasum, col = blues9)
+
+thdatasum <- function(x){ifelse(x == 0, NA, x)}
+datasum2 <- calc(datasum, thdatasum)
+
+mapview(datasum2, col = blues9)
+```
+
 

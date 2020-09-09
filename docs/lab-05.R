@@ -3,7 +3,7 @@ palobbwgs = palobb %>%
 
 palobb = st_bbox(palobbwgs)
 
-scenes = getlandsat::lsat_scenes()
+scenes = lsat_scenes()
 
 paloscene = scenes %>% 
   filter(min_lat <= palobb$ymin, max_lat >= palobb$ymax,
