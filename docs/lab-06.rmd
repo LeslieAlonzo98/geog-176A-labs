@@ -1,0 +1,135 @@
+---
+title: "Geography 176A"
+author: "[Leslie Alonzo](https://LeslieAlonzo98.github.io)"
+subtitle: 'Lab 5'
+output:
+  html_document:
+    theme: journal
+---
+
+```{r Importing Libraries, include=FALSE, message=FALSE, echo=FALSE}
+library(tidyverse)
+library(sf)
+library(raster)
+library(fasterize)
+library(whitebox)
+library(osmdata)
+library(elevatr)
+library(whitebox)
+library(gifski)
+```
+
+```{r Question 1, echo=FALSE, message=FALSE, warning=FALSE}
+basin  = read_sf("https://labs.waterdata.usgs.gov/api/nldi/linked-data/nwissite/USGS-11119750/basin/")
+  
+write_sf(basin, dsn = "../data/USGS-11119750.gpkg")
+
+elev = elevatr::get_elev_raster(basin, z = 13) %>% 
+  crop(basin) %>% 
+  mask(basin)
+
+elev_feet = elev * 3.281
+
+writeRaster(elev_feet, filename = "../data/basinelev.tif", overwrite = TRUE)
+```
+
+```{r building and stream data, echo=FALSE, message=FALSE, warning=FALSE}
+osm = osmdata::opq(basin) %>%
+  add_osm_feature('waterway', "stream") %>% 
+  osmdata_sf()
+print(osm)
+
+osm2 = osmdata::opq(basin) %>% 
+  add_osm_feature('building') %>% 
+  osmdata_sf()
+print(osm2)
+  
+centroid = st_centroid(osm2$osm_polygons) %>% 
+  st_intersection(basin)
+
+railroad = dplyr::filter(centroid, amenity == "railway")
+
+river = st_intersection(osm$osm_lines, basin)
+
+```
+
+```{r terrain analysis, echo=FALSE, message=FALSE, warning=FALSE}
+wbt_hillshade("../data/basinelev.tif", "../data/hillshade.tif")
+
+hillshade = raster("../data/hillshade.tif")
+
+plot(hillshade, col = gray.colors(256, alpha = .5), legend = FALSE)
+plot(basin$geometry, add = TRUE)
+plot(river$geometry, add = TRUE)
+
+riv = st_transform(river, 5070) %>% 
+  st_buffer(10) %>% 
+  st_transform(crs(elev_feet)) %>% 
+  fasterize::fasterize(elev_feet) %>% 
+  writeRaster("../data/riv.tif", overwrite = TRUE)
+
+wbt_breach_depressions("../data/basinelev.tif", "../data/bredep.tif")
+
+wbt_elevation_above_stream("../data/bredep.tif", "../data/riv.tif", "../data/streamelev.tif")
+
+handraster = raster("../data/streamelev.tif")+3.69
+
+rivraster = raster("../data/riv.tif")
+
+handraster[rivraster == 1] = 0
+
+writeRaster(handraster, "../data/rastif.tif", overwrite = TRUE)
+
+
+```
+
+```{r flood data, echo=FALSE, message=FALSE, warning=FALSE}
+
+flood = raster("../data/rastif.tif")
+
+floodmap = flood
+
+floodmap[floodmap >= 10.02] = NA
+
+cols = ifelse(!is.na(raster::extract(floodmap, centroid)), "red", "black")
+
+plot(hillshade, col = gray.colors(256, alpha = .5), legend = FALSE, main = paste0(sum(cols == "red"), " Impacted Buildings (10.02 Flood Stage)"))
+
+plot(floodmap, col = rev(blues9), legend = FALSE, add = TRUE)
+
+plot(centroid$geometry, add = TRUE, col = cols, pch = 16, cex = .08)
+
+plot(railroad$geometry, col = "green", cex = 1, pch = 16, add = TRUE)
+
+plot(basin$geometry, add = TRUE, border = "black")
+  
+```
+```{r extra credit, echo=FALSE, message=FALSE, warning=FALSE}
+sb = AOI::aoi_get("Santa Barbara")
+
+sbflood = crop(flood, sb)
+
+sbbasin = st_intersection(basin, sb)
+
+sbhill = crop(hillshade, sb)
+```
+
+```{r, eval = FALSE, echo = FALSE, message = FALSE, warning = FALSE}
+gifski::save_gif({
+  for (i in 0:20) {
+    tmp = sbflood
+    tmp[tmp >= i] = NA
+    cols = ifelse(!is.na(raster::extract(tmp, centroid)), "red", "black")
+    plot(sbhill, col = gray.colors(256, alpha = .5), legend = FALSE, main = paste0(sum(cols == "red"), " Impacted Buildings, ", i, " foot stage"))
+    plot(tmp, col = rev(blues9), legend = FALSE, add = TRUE)
+    plot(centroid$geometry, add = TRUE, col = cols, pch = 16, cex = .08)
+    plot(railroad$geometry, col = "green", cex = 1, pch = 16, add = TRUE)
+    plot(sbbasin$geometry, add = TRUE, border = "black")
+  }
+  
+}, gif_file = "../data/misscreek.gif",
+width = 600, height = 600,
+delay = .7, loop = TRUE)
+```
+![Gif](../data/misscreek.gif)
+
