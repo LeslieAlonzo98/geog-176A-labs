@@ -22,18 +22,20 @@ library(kableExtra)
 library(readxl)
 ```
 
-```{r Functions}
+```{r Functions, include=FALSE, message=FALSE, echo=FALSE}
 get_conus = function(data, var){
-  conus = filter(data, !get(var) %in% c("Hawaii", "Puerto Rico", "Alaska"))
+  conus = filter(data, !get(var) %in% c("Hawaii", "Puerto Rico", "Alaska", "Guam", "District of Columbia"))
   return(conus)
 }
 
 plot_tess = function(data, title){
   ggplot() + 
-    geom_sf(data = data, fill = "white", col = "navy", size = .2) +   
+    geom_sf(data = data, col = "white", size = .2) +   
     theme_void() +
-    labs(title = title, caption = paste("This tesselation has:", nrow(data), "tiles" )) +
-    theme(plot.title = element_text(hjust = .5, color =  "navy", face = "bold"))
+    theme(legend.position = 'none',
+          plot.title = element_text(face = "bold", color = "darkblue", hjust = .5, size = 24)) +
+    labs(title = paste0(title),
+         caption = paste0(nrow(data), " features"))
 }
 
 plot_pip = function(data){
@@ -56,25 +58,24 @@ point_in_polygon3 = function(points, polygon, group){
     st_as_sf()
 }
 
-step2function <- function(data, title){
-  data = data %>%
-    mutate(area = st_area(data) %>% 
-    set_units("km2") %>% 
-    drop_units(),
-    type = title) %>% 
-    st_drop_geometry() %>% 
-    mutate(mean = mean(area)) %>% 
-    mutate(sd = sd(area)) %>% 
-    mutate(totalArea = sum(area))
-}
-
-
+step2function = function(data, string){
   
-
+  newframe = data %>% 
+    mutate(area = st_area(data)) %>% 
+    drop_units() %>% 
+    mutate(area = area*0.000001)
+  dataframe = data.frame(type = string,
+                num_feat = nrow(newframe),
+                mean_area = mean(newframe$area),
+                st_dev = sd(newframe$area),
+                tot_area = sum(newframe$area))
+ 
+  return(dataframe)
+}
 
 ```
 
-```{r Question 1}
+```{r Question 1, include=FALSE, message=FALSE, echo=FALSE}
 #Question 1
 
 conus = USAboundaries::us_states() %>%
@@ -120,10 +121,9 @@ ggplot() +
 
 
 
-plot_tess(pip_counties, "Counties")
+plot_tess(pip_counties, "Original")
 
-countyarea = step2function(pip_counties, "Counties") %>% 
-  dplyr::select(c(area, type, mean, sd, totalArea))
+countyarea = step2function(pip_counties, "Original")
 
 #cOVERAGE SQUARE GRID
 
@@ -131,10 +131,9 @@ pip_counties_grid = st_make_grid(pip_counties, n = c(70, 50)) %>%
   st_as_sf() %>% 
   mutate(id = 1:n())
 
-plot_tess(pip_counties_grid, "Counties, Square Grid")
+plot_tess(pip_counties_grid, "Square Grid")
 
-squarearea = step2function(pip_counties_grid, "CountiesSquareGrid") %>% 
-  dplyr::select(c(area, type, mean, sd, totalArea))
+squarearea = step2function(pip_counties_grid, "Square Grid")
 
 #COVERAGE HEX GRID
 
@@ -142,11 +141,9 @@ pip_counties_hexgrid = st_make_grid(pip_counties, n = c(70, 50), square = FALSE)
   st_as_sf() %>% 
   mutate(id = 1:n())
 
-plot_tess(pip_counties_hexgrid, "Counties, Hexagon Grid")
+plot_tess(pip_counties_hexgrid, "Hexagon Grid")
 
-hexagonarea = step2function(pip_counties_hexgrid, "Counties, Hexagon Grid") %>% 
-  dplyr::select(c(area, type, mean, sd, totalArea))
-
+hexagonarea = step2function(pip_counties_hexgrid, "Hexagon Grid")
 
 # VORONI TESSELLATION
 
@@ -162,9 +159,7 @@ v_grid_final = st_intersection(v_grid, st_union(pip_counties))
 plot_tess(v_grid_final, "Voroni Coverage") + 
   geom_sf(data = pip_counties_u, col = "darkred", size = .2)
 
-voroniarea = step2function(v_grid_final, "Voroni Coverage") %>% 
-  dplyr::select(c(area, type, mean, sd, totalArea))
-
+voroniarea = step2function(v_grid_final, "Voroni Coverage")
 
 #TRIANGULATED TESSELLATION
 
@@ -178,29 +173,49 @@ t_grid_final = st_intersection(t_grid, st_union(pip_counties))
 plot_tess(t_grid_final, "Triangulated Coverage") + 
   geom_sf(data = pip_cent, col = "darkred", size = .3)
 
-triangulatedarea = step2function(t_grid_final, "Triangulated Coverage") %>% 
-  dplyr::select(c(area, type, mean, sd, totalArea))
+triangulatedarea = step2function(t_grid_final, "Triangulated Coverage")
 ```
 
-```{r Question 2}
-tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, voroniarea) %>% 
-  dplyr::select(type, area, mean, sd, totalArea)
+```{r plots, message=FALSE}
+plot_tess(pip_counties, "Original")
+
+plot_tess(pip_counties_grid, "Square Grid")
+
+plot_tess(pip_counties_hexgrid, "Hexagon Grid")
+
+plot_tess(v_grid_final, "Voroni Coverage") + 
+  geom_sf(data = pip_counties_u, col = "darkred", size = .2)
+
+plot_tess(t_grid_final, "Triangulated Coverage") + 
+  geom_sf(data = pip_cent, col = "darkred", size = .3)
+
+```
+
+```{r Question 2, include=FALSE, message=FALSE, echo=FALSE}
+tess_summary = bind_rows(countyarea, squarearea, hexagonarea, triangulatedarea, voroniarea)
+  
 
 knitr::kable(tess_summary,
-             caption = "Tess Summary",
-             col.names = c("type", "area", "mean", "sd", "totalArea"),
-             format.args = list(big.mark = ",")) %>% 
+             col.names = c("Type", "Number of Features", "Mean Area", "St. Dev", "Total Area"),
+             caption = "Summary of Our 5 Tesselations")%>% 
+  kableExtra::kable_styling("striped", full_width = TRUE, font_size = 10) 
+
+```
+
+```{r}
+knitr::kable(tess_summary,
+             col.names = c("Type", "Number of Features", "Mean Area", "St. Dev", "Total Area"),
+             caption = "Summary of Our 5 Tesselations")%>% 
   kableExtra::kable_styling("striped", full_width = TRUE, font_size = 10) 
 ```
 
-```{r Question}
-damdata = read_xlsx('../data/NID2019_U.xlsx') %>% 
-  filter(!is.na()) %>% 
-  st_as_sf(coords = c("lng", "lat"), crs = 4326) %>% 
-  st_transform(5070)
+Differences in each tesselation 
 
+-Original: Visually, it is represented the best. The downfall is that it differs the most in standard deviation, which doesn't help when trying to do something with equal area.
 
+-Square/Hexagon: These tesselations have the least standard deviation and because they are displayed to be equally represented, it results in the least amount of features. 
 
+-Voronoi: This tesselation has the greatest variance in the sizes, but is the closest to the original tesselation
 
-```
+-Triangulation: This tesselation provides twice as much features which improves it accuracy, but process slower.
 
